@@ -1,0 +1,13 @@
+{
+  "name": "contract-detector-json-server",
+  "version": "1.0.0",
+  "description": "Mock API server for ContractDetector testing",
+  "scripts": {
+    "start": "json-server --watch db.json --port 3000",
+    "start:v2": "json-server --watch db-v2.json --port 3000",
+    "start:delay": "json-server --watch db.json --port 3000 --delay 200"
+  },
+  "dependencies": {
+    "json-server": "^1.0.0-beta.3"
+  }
+}

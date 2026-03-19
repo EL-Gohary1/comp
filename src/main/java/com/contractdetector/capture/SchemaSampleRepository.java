@@ -1,0 +1,15 @@
+package com.contractdetector.capture;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface SchemaSampleRepository extends JpaRepository<ApiResponseSample, String> {
+    
+    List<ApiResponseSample> findByPath(String path);
+    
+    Optional<ApiResponseSample> findFirstByPathOrderByTimestampDesc(String path);
+}

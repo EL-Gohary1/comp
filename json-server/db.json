@@ -1,0 +1,116 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "Alice Johnson",
+      "email": "alice@example.com",
+      "age": 30,
+      "role": "admin",
+      "active": true,
+      "address": {
+        "street": "123 Main St",
+        "city": "Cairo",
+        "country": "EG"
+      }
+    },
+    {
+      "id": 2,
+      "name": "Bob Smith",
+      "email": "bob@example.com",
+      "age": 25,
+      "role": "user",
+      "active": true,
+      "address": {
+        "street": "456 Oak Ave",
+        "city": "Alexandria",
+        "country": "EG"
+      }
+    },
+    {
+      "id": 3,
+      "name": "Carol White",
+      "email": "carol@example.com",
+      "age": 35,
+      "role": "user",
+      "active": false,
+      "address": {
+        "street": "789 Pine Rd",
+        "city": "Giza",
+        "country": "EG"
+      }
+    }
+  ],
+  "products": [
+    {
+      "id": 1,
+      "name": "Laptop Pro",
+      "price": 1499.99,
+      "stock": 50,
+      "category": "electronics",
+      "available": true,
+      "sku": "LAP-001",
+      "ratings": {
+        "average": 4.5,
+        "count": 120
+      }
+    },
+    {
+      "id": 2,
+      "name": "Wireless Mouse",
+      "price": 29.99,
+      "stock": 200,
+      "category": "accessories",
+      "available": true,
+      "sku": "MOU-002",
+      "ratings": {
+        "average": 4.2,
+        "count": 340
+      }
+    },
+    {
+      "id": 3,
+      "name": "USB Hub",
+      "price": 45.00,
+      "stock": 0,
+      "category": "accessories",
+      "available": false,
+      "sku": "HUB-003",
+      "ratings": {
+        "average": 3.8,
+        "count": 89
+      }
+    }
+  ],
+  "orders": [
+    {
+      "id": 1,
+      "userId": 1,
+      "productId": 1,
+      "quantity": 2,
+      "totalPrice": 2999.98,
+      "status": "shipped",
+      "createdAt": "2026-03-01T10:00:00Z",
+      "shippingAddress": "123 Main St, Cairo"
+    },
+    {
+      "id": 2,
+      "userId": 2,
+      "productId": 2,
+      "quantity": 1,
+      "totalPrice": 29.99,
+      "status": "delivered",
+      "createdAt": "2026-03-05T14:30:00Z",
+      "shippingAddress": "456 Oak Ave, Alexandria"
+    },
+    {
+      "id": 3,
+      "userId": 3,
+      "productId": 3,
+      "quantity": 3,
+      "totalPrice": 135.00,
+      "status": "pending",
+      "createdAt": "2026-03-10T09:15:00Z",
+      "shippingAddress": "789 Pine Rd, Giza"
+    }
+  ]
+}
