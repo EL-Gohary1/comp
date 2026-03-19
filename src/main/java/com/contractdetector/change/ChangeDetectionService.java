@@ -81,38 +81,45 @@ public class ChangeDetectionService {
     private void diffNodes(JsonNode oldNode, JsonNode newNode,
                            String   path,   List<SchemaChange> changes) {
 
-        // ── Handle type-level diffs ──────────────────────────────────────────
         String oldType = getType(oldNode);
         String newType = getType(newNode);
 
         if (!oldType.equals(newType)) {
             changes.add(SchemaChange.builder()
-                .path(path)
-                .changeType(ChangeType.TYPE_CHANGED)
-                .riskLevel(RiskLevel.HIGH)
-                .oldValue(oldType)
-                .newValue(newType)
-                .build());
-            return;   // no point diving into properties of incompatible types
+                                    .path(path)
+                                    .changeType(ChangeType.TYPE_CHANGED)
+                                    .riskLevel(RiskLevel.HIGH)
+                                    .oldValue(oldType)
+                                    .newValue(newType)
+                                    .build());
+
+            if (!(isObjectType(oldNode) && isObjectType(newNode)) &&
+                    !(oldType.contains("array") && newType.contains("array"))) {
+                return;
+            }
         }
 
-        // ── Properties diff (objects only) ───────────────────────────────────
-        JsonNode oldProps = oldNode.path("properties");
-        JsonNode newProps = newNode.path("properties");
+        if (oldType.contains("array") || newType.contains("array")) {
+            JsonNode oldItems = oldNode.path("items");
+            JsonNode newItems = newNode.path("items");
 
-        if (!oldProps.isMissingNode() || !newProps.isMissingNode()) {
-
-            // Fields present in old but removed in new → REMOVED (HIGH)
-            diffFieldsRemoved(oldProps, newProps, path, changes);
-
-            // Fields present in new but added in old → ADDED (LOW)
-            diffFieldsAdded(oldProps, newProps, path, changes);
-
-            // Fields present in both → recurse + check type changes
-            diffFieldsCommon(oldProps, newProps, path, changes);
+            if (!oldItems.isMissingNode() || !newItems.isMissingNode()) {
+                diffNodes(oldItems, newItems, path + "[items]", changes);
+            }
+            return;
         }
 
-        // ── Required array diff ──────────────────────────────────────────────
+        if (isObjectType(oldNode) || isObjectType(newNode)) {
+            JsonNode oldProps = oldNode.path("properties");
+            JsonNode newProps = newNode.path("properties");
+
+            if (!oldProps.isMissingNode() || !newProps.isMissingNode()) {
+                diffFieldsRemoved(oldProps, newProps, path, changes);
+                diffFieldsAdded(oldProps, newProps, path, changes);
+                diffFieldsCommon(oldProps, newProps, path, changes);
+            }
+        }
+
         diffRequired(oldNode, newNode, path, changes);
     }
 
@@ -169,7 +176,7 @@ public class ChangeDetectionService {
                 JsonNode newField = newProps.get(fieldName);
 
                 // Recurse into nested objects
-                if ("object".equals(getType(oldField))) {
+                if (isObjectType(oldField)) {
                     diffNodes(oldField, newField,
                         basePath + ".properties." + fieldName, changes);
                 } else {
@@ -232,7 +239,34 @@ public class ChangeDetectionService {
     private String getType(JsonNode node) {
         if (node == null || node.isMissingNode()) return "unknown";
         JsonNode typeNode = node.get("type");
-        return typeNode != null ? typeNode.asText("unknown") : "unknown";
+        if (typeNode == null) return "unknown";
+        
+        if (typeNode.isArray()) {
+            List<String> types = new ArrayList<>();
+            typeNode.forEach(n -> types.add(n.asText()));
+            return types.stream().sorted().collect(java.util.stream.Collectors.joining(", "));
+        }
+        
+        return typeNode.asText("unknown");
+    }
+
+    private boolean isObjectType(JsonNode node) {
+        if (node == null || node.isMissingNode()) return false;
+        
+        // Explicit type check
+        JsonNode typeNode = node.get("type");
+        if (typeNode != null) {
+            if (typeNode.isArray()) {
+                for (JsonNode t : typeNode) {
+                    if ("object".equals(t.asText())) return true;
+                }
+            } else if ("object".equals(typeNode.asText())) {
+                return true;
+            }
+        }
+        
+        // Implicit type check (has properties)
+        return node.has("properties");
     }
 
     private List<String> toList(JsonNode arrayNode) {

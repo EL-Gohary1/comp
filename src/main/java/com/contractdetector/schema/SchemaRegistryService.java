@@ -31,6 +31,7 @@ public class SchemaRegistryService {
 
         if (existingSchemaOpt.isPresent()) {
             ApiSchema existingSchema = existingSchemaOpt.get();
+
             SchemaDiff diff = changeDetectionService.diff(existingSchema.getSchemaJson(), newSchema.getSchemaJson());
 
             if (diff.hasChanges()) {
