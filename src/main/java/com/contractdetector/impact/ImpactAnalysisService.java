@@ -1,101 +1,90 @@
 package com.contractdetector.impact;
 
+
 import com.contractdetector.change.SchemaDiff;
+import com.contractdetector.schema.ApiSchema;
 import com.contractdetector.schema.SchemaChangedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 
-/**
- * Listens for {@link SchemaChangedEvent} and performs impact analysis on the
- * local codebase to identify which Java POJOs and test classes are affected by
- * the detected schema drift.
- *
- * <h3>Analysis pipeline</h3>
- * <ol>
- *   <li>Receive the event (runs async on the shared task executor).</li>
- *   <li>Skip no-change events (new baseline registrations).</li>
- *   <li>Delegate POJO discovery to {@link PojoDiscoveryService}.</li>
- *   <li>Delegate test-class analysis to {@link StaticTestAnalyzer}.</li>
- *   <li>Log a consolidated impact report per risk level.</li>
- * </ol>
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ImpactAnalysisService {
 
-    private final StaticTestAnalyzer staticTestAnalyzer;
+    private final StaticTestAnalyzer testAnalyzer;
     private final PojoDiscoveryService pojoDiscoveryService;
 
-    // ── Event handling ───────────────────────────────────────────────────────
+    private final ApplicationEventPublisher eventPublisher;
 
-    /**
-     * Entry point triggered by Spring's event bus whenever a schema change is detected.
-     *
-     * <p>Intentionally async so that event publishing in {@link com.contractdetector.schema.SchemaRegistryService}
-     * completes without blocking the capture pipeline.
-     *
-     * @param event the schema-changed event carrying old/new schemas and the diff
-     */
-    @Async("taskExecutor")
+    @Async("captureExecutor")
     @EventListener
     public void onSchemaChanged(SchemaChangedEvent event) {
-
         SchemaDiff diff = event.getDiff();
 
-        // ── Skip baseline registrations (first schema for an endpoint) ────────
-        if (diff == null || !diff.hasChanges()) {
-            log.debug("ImpactAnalysisService: no-change event for [{}] — skipping",
-                event.getNewSchema().getEndpointPath());
+        if (diff == null || diff.getChanges().isEmpty()) {
+            log.debug("ImpactAnalysisService: No significant changes detected. Skipping.");
             return;
         }
 
-        String endpoint = event.getNewSchema().getEndpointPath();
-        String method   = event.getNewSchema().getHttpMethod();
+        ApiSchema newSchema = event.getNewSchema();
 
-        log.info("=== Impact Analysis triggered for [{} {}] v{} → v{} ===",
-            method, endpoint,
-            event.getOldSchema() != null ? event.getOldSchema().getVersion() : "–",
-            event.getNewSchema().getVersion());
+        log.info("=== Starting Deep Impact Analysis for: {} {} ===",
+                newSchema.getHttpMethod(), newSchema.getEndpointPath());
 
-        // ── POJO discovery ────────────────────────────────────────────────────
-        List<String> affectedPojos = pojoDiscoveryService.findAffectedPojos(diff);
-        if (affectedPojos.isEmpty()) {
-            log.info("  [POJO] No POJO fields directly affected.");
-        } else {
-            log.warn("  [POJO] {} POJO(s) potentially affected:", affectedPojos.size());
-            affectedPojos.forEach(p -> log.warn("    → {}", p));
-        }
+        List<TestCase> affectedTests = testAnalyzer.findAffectedTests(
+                newSchema.getEndpointPath(),
+                getTestSourceDir()
+        );
 
-        // ── Test analysis ─────────────────────────────────────────────────────
-        List<String> affectedTests = staticTestAnalyzer.findAffectedTests(endpoint, diff);
-        if (affectedTests.isEmpty()) {
-            log.info("  [TEST] No test methods found referencing this endpoint.");
-        } else {
-            log.warn("  [TEST] {} test method(s) may require update:", affectedTests.size());
-            affectedTests.forEach(t -> log.warn("    → {}", t));
-        }
+        List<POJOClass> affectedPojos = pojoDiscoveryService.findAffectedPojos(
+                diff.getChanges(),
+                getMainSourceDir()
+        );
 
-        // ── Risk summary ──────────────────────────────────────────────────────
-        logRiskSummary(diff);
+
+        AnalysisContext context = AnalysisContext.builder()
+                                                 .diff(diff)
+                                                 .newSchema(newSchema)
+                                                 .affectedTests(affectedTests)
+                                                 .affectedPojos(affectedPojos)
+                                                 .build();
+
+        System.out.println("******************Impact Analysis Report****************");
+        logReport(context);
+        System.out.println("********************************************************");
+        eventPublisher.publishEvent(new ImpactAnalysisReadyEvent(this, context));
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    private void logReport(AnalysisContext context) {
+        log.info("--- Impact Analysis Report ---");
+        log.warn(">> Affected Tests: {}", context.getAffectedTests().size());
+        context.getAffectedTests().forEach(t -> log.warn("   - {} in {}", t.getMethodName(), t.getClassName()));
 
-    private void logRiskSummary(SchemaDiff diff) {
-        log.info("  Risk Summary: {} HIGH | {} MEDIUM | {} LOW",
-            diff.getHighRiskChanges().size(),
-            diff.getMediumRiskChanges().size(),
-            diff.getLowRiskChanges().size());
+        log.warn(">> Affected POJOs: {}", context.getAffectedPojos().size());
 
-        if (!diff.getHighRiskChanges().isEmpty()) {
-            log.error("  ⚠ HIGH-RISK CHANGES DETECTED — manual review required:");
-            diff.getHighRiskChanges().forEach(c -> log.error("    {}", c.toSummary()));
-        }
+
+        log.info(">> Total Risk: {} HIGH, {} MEDIUM, {} LOW",
+                context.getDiff().getHighRiskChanges().size(),
+                context.getDiff().getMediumRiskChanges().size(),
+                context.getDiff().getLowRiskChanges().size());
+
+        log.info("--- Analysis Complete ---");
+    }
+
+    private Path getTestSourceDir() {
+        return Paths.get(System.getProperty("user.dir"), "src", "test", "java");
+    }
+
+    private Path getMainSourceDir() {
+        return Paths.get(System.getProperty("user.dir"), "src", "main", "java");
     }
 }

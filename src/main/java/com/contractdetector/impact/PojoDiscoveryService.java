@@ -1,120 +1,140 @@
 package com.contractdetector.impact;
 
-import com.contractdetector.change.ChangeType;
-import com.contractdetector.change.SchemaDiff;
+import com.contractdetector.change.SchemaChange;
+import com.github.javaparser.JavaParser;
+import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.expr.AnnotationExpr;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.nio.file.*;
-import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
-/**
- * Placeholder implementation that discovers Java POJO classes whose field
- * names overlap with schema properties that were removed or renamed.
- *
- * <h3>Current heuristic</h3>
- * Scans all {@code .java} files under {@code src/main/java}, then checks whether
- * any of the REMOVED field names from the {@link SchemaDiff} appear as word-boundary
- * tokens inside the file (e.g. as a field declaration or getter name).
- *
- * <h3>Extending this service</h3>
- * Replace the text-scan with a JavaParser-based field-declaration visitor to achieve
- * precise field-level matching and avoid false positives from comments or string literals.
- */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class PojoDiscoveryService {
 
-    @Value("${contract-detector.scan.main-sources-root:src/main/java}")
-    private String mainSourcesRoot;
+    private final JavaParser javaParser;
 
-    /**
-     * Finds main-source Java classes that likely need updating due to the given diff.
-     *
-     * <p>Only {@link ChangeType#REMOVED} and {@link ChangeType#TYPE_CHANGED} changes
-     * are considered, as these represent fields that consumers must actively handle.
-     *
-     * @param diff the detected schema diff
-     * @return list of simple class names (filename-based) that are potentially affected
-     */
-    public List<String> findAffectedPojos(SchemaDiff diff) {
-        List<String> affected = new ArrayList<>();
 
-        // Collect field names from high-risk changes only
-        Set<String> removedOrChangedFields = diff.getChanges().stream()
-            .filter(c -> c.getChangeType() == ChangeType.REMOVED
-                      || c.getChangeType() == ChangeType.TYPE_CHANGED)
-            .map(c -> extractFieldName(c.getPath()))
-            .filter(name -> name != null && !name.isBlank())
-            .collect(Collectors.toSet());
+    public List<POJOClass> findAffectedPojos(List<SchemaChange> changes,
+                                             Path mainSourceDir) {
+        List<POJOClass> affectedPojos = new ArrayList<>();
 
-        if (removedOrChangedFields.isEmpty()) {
-            log.debug("PojoDiscoveryService: no removed/changed fields — skipping POJO scan");
-            return affected;
-        }
-
-        Path root = Paths.get(mainSourcesRoot);
-        if (!Files.exists(root)) {
-            log.debug("PojoDiscoveryService: main sources root not found at '{}' — skipping scan",
-                root.toAbsolutePath());
-            return affected;
-        }
+        List<String> changedFields = changes.stream()
+                                            .map(SchemaChange::getFieldName)
+                                            .distinct()
+                                            .collect(Collectors.toList());
 
         try {
-            Files.walkFileTree(root, new SimpleFileVisitor<>() {
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                    if (file.toString().endsWith(".java")) {
-                        List<String> hits = scanFile(file, removedOrChangedFields);
-                        affected.addAll(hits);
-                    }
-                    return FileVisitResult.CONTINUE;
-                }
-            });
+            Files.walk(mainSourceDir)
+                 .filter(path -> path.toString().endsWith(".java"))
+                 .forEach(file -> {
+                     try {
+                         analyzePojoFile(file, changedFields, affectedPojos);
+                     } catch (IOException e) {
+                         log.warn("Failed to parse: {}", file, e);
+                     }
+                 });
+
         } catch (IOException e) {
-            log.error("PojoDiscoveryService: error scanning main sources: {}", e.getMessage(), e);
+            log.error("Failed to walk source directory", e);
         }
 
-        return affected;
+        log.info("Found {} affected POJOs", affectedPojos.size());
+        return affectedPojos;
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
+    private void analyzePojoFile(Path file,
+                                 List<String> changedFields,
+                                 List<POJOClass> affectedPojos) throws IOException {
 
-    /**
-     * Extracts the leaf field name from a JSONPath-style schema path.
-     * e.g. {@code $.properties.user.properties.email} → {@code email}
-     */
-    private String extractFieldName(String schemaPath) {
-        if (schemaPath == null) return null;
-        String[] parts = schemaPath.split("\\.");
-        return parts[parts.length - 1];
-    }
+        CompilationUnit cu = javaParser.parse(file).getResult()
+                                       .orElseThrow(() -> new IOException("Failed to parse: " + file));
 
-    private List<String> scanFile(Path file, Set<String> fieldNames) {
-        List<String> results = new ArrayList<>();
-        try {
-            String content   = Files.readString(file);
-            String className = file.getFileName().toString().replace(".java", "");
+        String packageName = cu.getPackageDeclaration()
+                               .map(pd -> pd.getNameAsString())
+                               .orElse("");
 
-            for (String field : fieldNames) {
-                // Word-boundary match — avoids matching "id" inside "valid"
-                if (content.matches("(?s).*\\b" + field + "\\b.*")) {
-                    results.add(className + "#" + field
-                        + " (field reference — verify POJO and getter/setter)");
-                    log.debug("PojoDiscoveryService: flagged {} for field '{}'",
-                        file.toAbsolutePath(), field);
-                    break;  // flag file once even if multiple fields match
+        cu.findAll(ClassOrInterfaceDeclaration.class).forEach(clazz -> {
+
+            List<POJOClass.POJOField> matchingFields = new ArrayList<>();
+            List<String> jsonAnnotations = new ArrayList<>();
+
+            for (FieldDeclaration field : clazz.getFields()) {
+
+                String fieldName = field.getVariable(0).getNameAsString();
+
+                String jsonPropertyName = getJsonPropertyName(field);
+                String effectiveName = jsonPropertyName != null ?
+                        jsonPropertyName : fieldName;
+
+                if (changedFields.contains(effectiveName) ||
+                        changedFields.contains(fieldName)) {
+
+                    matchingFields.add(POJOClass.POJOField.builder()
+                                                          .name(fieldName)
+                                                          .type(field.getVariable(0).getType().asString())
+                                                          .jsonPropertyName(jsonPropertyName)
+                                                          .annotations(field.getAnnotations().stream()
+                                                                            .map(AnnotationExpr::toString)
+                                                                            .collect(Collectors.toList()))
+                                                          .build());
+
+                    jsonAnnotations.addAll(field.getAnnotations().stream()
+                                                .map(AnnotationExpr::toString)
+                                                .collect(Collectors.toList()));
                 }
             }
-        } catch (IOException e) {
-            log.warn("PojoDiscoveryService: could not read file {}: {}", file, e.getMessage());
+
+            if (!matchingFields.isEmpty()) {
+                affectedPojos.add(POJOClass.builder()
+                                           .id(java.util.UUID.randomUUID().toString())
+                                           .filePath(file)
+                                           .className(clazz.getNameAsString())
+                                           .packageName(packageName)
+                                           .fields(matchingFields)
+                                           .matchingChanges(changedFields.stream()
+                                                                        .filter(cf -> matchingFields.stream()
+                                                                                                    .anyMatch(mf -> mf.getName().equals(cf) ||
+                                                                                                            mf.getJsonPropertyName().equals(cf)))
+                                                                        .collect(Collectors.toList()))
+                                           .hasJsonAnnotations(!jsonAnnotations.isEmpty())
+                                           .jsonAnnotations(jsonAnnotations)
+                                           .build());
+            }
+        });
+    }
+
+
+    private String getJsonPropertyName(FieldDeclaration field) {
+        Optional<AnnotationExpr> jsonProperty = field.getAnnotations().stream()
+                                                     .filter(a -> a.getNameAsString().equals("JsonProperty"))
+                                                     .findFirst();
+
+        if (jsonProperty.isPresent()) {
+            String annotation = jsonProperty.get().toString();
+
+            if (annotation.contains("(")) {
+                String value = annotation.replaceAll(
+                        ".*@JsonProperty\\(\"([^\"]+)\"\\).*", "$1");
+                if (!value.equals(annotation)) return value;
+
+                value = annotation.replaceAll(
+                        ".*@JsonProperty\\(value = \"([^\"]+)\"\\).*", "$1");
+                if (!value.equals(annotation)) return value;
+            }
         }
-        return results;
+
+        return null;
     }
 }

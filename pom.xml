@@ -16,16 +16,25 @@
     <artifactId>contract-detector</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <name>ContractDetector</name>
-    <description>Agentic API Change Detector — captures live API responses, infers JSON schemas, detects drift, and performs impact analysis</description>
+    <description>Agentic API Change Detector — captures live API responses, infers JSON schemas, detects drift, and
+        performs impact analysis
+    </description>
     <packaging>jar</packaging>
 
     <properties>
         <java.version>17</java.version>
         <rest-assured.version>5.4.0</rest-assured.version>
         <victools.version>4.31.1</victools.version>
+        <langchain4j.version>0.35.0</langchain4j.version>
     </properties>
 
     <dependencies>
+
+        <dependency>
+            <groupId>com.github.javaparser</groupId>
+            <artifactId>javaparser-symbol-solver-core</artifactId>
+            <version>3.26.2</version>
+        </dependency>
 
         <dependency>
             <groupId>commons-validator</groupId>
@@ -113,6 +122,23 @@
             <version>4.2.1</version>
             <scope>test</scope>
         </dependency>
+
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-spring-boot-starter</artifactId>
+            <version>${langchain4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-ollama</artifactId>
+            <version>${langchain4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-embeddings</artifactId>
+            <version>${langchain4j.version}</version>
+        </dependency>
+
 
     </dependencies>
 

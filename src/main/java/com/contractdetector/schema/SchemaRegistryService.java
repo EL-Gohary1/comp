@@ -2,7 +2,6 @@ package com.contractdetector.schema;
 
 import com.contractdetector.change.ChangeDetectionService;
 import com.contractdetector.change.SchemaDiff;
-import com.contractdetector.impact.SchemaChangedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -48,7 +47,7 @@ public class SchemaRegistryService {
                 schemaRepository.save(newSchema);
                 diff.setNewSchemaId(newSchema.getId());
 
-                eventPublisher.publishEvent(new SchemaChangedEvent(this, diff, newSchema));
+                eventPublisher.publishEvent(new SchemaChangedEvent(this, existingSchema , newSchema,diff));
             } else {
                 log.debug("No changes detected for {} {}", newSchema.getHttpMethod(), newSchema.getEndpointPath());
             }

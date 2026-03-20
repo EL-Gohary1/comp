@@ -73,6 +73,10 @@ public class ChangeDetectionService {
             );
         }
 
+        System.out.println("-*****************************-");
+        System.out.println(result.toSummary());
+        System.out.println("-*****************************-");
+
         return result;
     }
 

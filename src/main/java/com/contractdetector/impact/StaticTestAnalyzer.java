@@ -1,105 +1,172 @@
 package com.contractdetector.impact;
 
-import com.contractdetector.change.SchemaDiff;
+import com.github.javaparser.JavaParser;
+import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.StringLiteralExpr;
+import lombok.Builder;
+import lombok.Data;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.nio.file.*;
-import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
-/**
- * Placeholder implementation that scans the project's {@code src/test/java} directory
- * for test source files that reference the changed endpoint path.
- *
- * <h3>Current heuristic</h3>
- * A test class is flagged as "affected" if its source file contains a literal string
- * matching the {@code endpointPath} (or key segments of it).  This is an intentionally
- * simple first pass; a future version should use a proper AST parser (e.g. JavaParser)
- * to resolve method-level references.
- *
- * <h3>Extending this service</h3>
- * Replace the {@link #scanFile} method with a JavaParser-based visitor that resolves
- * RestAssured {@code .when().get("/path")} call chains to achieve method-level precision.
- */
 @Slf4j
-@Service
+@Component
+@RequiredArgsConstructor
 public class StaticTestAnalyzer {
 
-    @Value("${contract-detector.scan.test-sources-root:src/test/java}")
-    private String testSourcesRoot;
+    private final JavaParser javaParser;
 
-    /**
-     * Scans test sources for files referencing the given endpoint path.
-     *
-     * @param endpointPath normalised endpoint path (e.g. {@code /api/users/{id}})
-     * @param diff         the detected schema diff (unused by the heuristic but
-     *                     available for future refined scanning)
-     * @return list of {@code ClassName#methodName} descriptors (best-effort)
-     */
-    public List<String> findAffectedTests(String endpointPath, SchemaDiff diff) {
-        List<String> affected = new ArrayList<>();
+    private static final Set<String> HTTP_METHODS = Set.of(
+            "get", "post", "put", "patch", "delete"
+    );
 
-        Path root = Paths.get(testSourcesRoot);
-        if (!Files.exists(root)) {
-            log.debug("StaticTestAnalyzer: test sources root not found at '{}' — skipping scan",
-                root.toAbsolutePath());
-            return affected;
-        }
-
-        // Build a set of search tokens derived from the normalised path
-        // e.g. /api/users/{id}  → ["api", "users"]
-        List<String> tokens = buildSearchTokens(endpointPath);
+    public List<TestCase> findAffectedTests(String endpointPattern, Path testSourceDir) {
+        List<TestCase> affectedTests = new ArrayList<>();
 
         try {
-            Files.walkFileTree(root, new SimpleFileVisitor<>() {
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                    if (file.toString().endsWith(".java")) {
-                        List<String> hits = scanFile(file, tokens);
-                        affected.addAll(hits);
-                    }
-                    return FileVisitResult.CONTINUE;
+            if (!Files.exists(testSourceDir)) {
+                log.warn("Test directory not found: {}", testSourceDir);
+                return affectedTests;
+            }
+
+            List<Path> testFiles = Files.walk(testSourceDir)
+                                        .filter(path -> path.toString().endsWith("Test.java"))
+                                        .collect(Collectors.toList());
+
+            for (Path testFile : testFiles) {
+                try {
+                    analyzeTestFile(testFile, endpointPattern, affectedTests);
+                } catch (Exception e) {
+                    log.warn("Failed to analyze file: {}", testFile, e);
                 }
-            });
+            }
+
         } catch (IOException e) {
-            log.error("StaticTestAnalyzer: error scanning test sources: {}", e.getMessage(), e);
+            log.error("Error walking test directory", e);
         }
 
-        return affected;
+        return affectedTests;
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
+    private void analyzeTestFile(Path testFile, String endpointPattern, List<TestCase> affectedTests) throws IOException {
+        CompilationUnit cu = javaParser.parse(testFile).getResult()
+                                       .orElseThrow(() -> new IOException("JavaParser failed to parse file"));
 
-    private List<String> buildSearchTokens(String endpointPath) {
-        List<String> tokens = new ArrayList<>();
-        for (String segment : endpointPath.split("/")) {
-            // Skip empty segments and generic placeholders
-            if (!segment.isBlank() && !segment.startsWith("{")) {
-                tokens.add(segment);
+        String className = cu.findFirst(ClassOrInterfaceDeclaration.class)
+                             .map(c -> c.getNameAsString())
+                             .orElse(testFile.getFileName().toString().replace(".java", ""));
+
+        cu.findAll(MethodDeclaration.class).forEach(method -> {
+            if (method.isAnnotationPresent("Test")) {
+
+                List<RestAssuredCall> calls = extractRestAssuredCalls(method);
+
+                for (RestAssuredCall call : calls) {
+                    if (matchesEndpoint(call.getPath(), endpointPattern)) {
+
+                        affectedTests.add(TestCase.builder()
+                                                  .id(UUID.randomUUID().toString())
+                                                  .filePath(testFile.toAbsolutePath().toString())
+                                                  .className(className)
+                                                  .methodName(method.getNameAsString())
+                                                  .lineNumber(method.getBegin().map(p -> p.line).orElse(0))
+                                                  .endpointPattern(endpointPattern)
+                                                  .confidence(TestCase.Confidence.HIGH) // أصبح HIGH لأننا نستخدم Parser
+                                                  .httpMethod(call.getHttpMethod())
+                                                  .path(call.getPath())
+                                                  .assertions(call.getAssertions())
+                                                  .jsonPathExpressions(call.getJsonPathExpressions())
+                                                  .build());
+                        break;
+                    }
+                }
             }
-        }
-        return tokens;
+        });
     }
 
-    private List<String> scanFile(Path file, List<String> tokens) {
-        List<String> results = new ArrayList<>();
-        try {
-            String content   = Files.readString(file);
-            String className = file.getFileName().toString().replace(".java", "");
+    private List<RestAssuredCall> extractRestAssuredCalls(MethodDeclaration method) {
+        List<RestAssuredCall> calls = new ArrayList<>();
 
-            boolean fileMatches = tokens.stream().anyMatch(content::contains);
-            if (fileMatches) {
-                // Placeholder: flag the whole class; a real impl would resolve method names
-                results.add(className + " (path reference found — review required)");
-                log.debug("StaticTestAnalyzer: flagged {}", file.toAbsolutePath());
+        method.findAll(MethodCallExpr.class).forEach(call -> {
+            String methodName = call.getNameAsString().toLowerCase();
+
+            if (HTTP_METHODS.contains(methodName)) {
+                String path = extractPathFromCall(call);
+                List<String> assertions = extractAssertions(method);
+                List<String> jsonPaths = extractJsonPaths(assertions);
+
+                calls.add(RestAssuredCall.builder()
+                                         .httpMethod(methodName.toUpperCase())
+                                         .path(path)
+                                         .assertions(assertions)
+                                         .jsonPathExpressions(jsonPaths)
+                                         .build());
             }
-        } catch (IOException e) {
-            log.warn("StaticTestAnalyzer: could not read file {}: {}", file, e.getMessage());
+        });
+        return calls;
+    }
+
+    private String extractPathFromCall(MethodCallExpr httpCall) {
+        return httpCall.getArguments().stream()
+                       .filter(arg -> arg instanceof StringLiteralExpr)
+                       .map(arg -> ((StringLiteralExpr) arg).getValue())
+                       .findFirst()
+                       .orElse("");
+    }
+
+    private List<String> extractAssertions(MethodDeclaration method) {
+        List<String> assertions = new ArrayList<>();
+        Set<String> assertionMethods = Set.of("body", "statusCode", "header", "contentType");
+
+        method.findAll(MethodCallExpr.class).forEach(call -> {
+            if (assertionMethods.contains(call.getNameAsString())) {
+                assertions.add(call.toString());
+            }
+        });
+        return assertions;
+    }
+
+    private List<String> extractJsonPaths(List<String> assertions) {
+        List<String> jsonPaths = new ArrayList<>();
+        for (String assertion : assertions) {
+            if (assertion.contains("body(")) {
+                String rawPath = assertion.replaceAll(".*body\\s*\\(\\s*\"([^\"]+)\".*", "$1");
+                if (!rawPath.equals(assertion)) {
+                    jsonPaths.add("$." + rawPath);
+                }
+            }
         }
-        return results;
+        return jsonPaths;
+    }
+
+    private boolean matchesEndpoint(String actualPath, String endpointPattern) {
+        if (actualPath == null || actualPath.isEmpty()) return false;
+
+        String regex = endpointPattern
+                .replaceAll("\\{[^}]+\\}", "[^/]+") // تحويل أي {param} إلى Regex يقبل أي نص
+                .replace("/", "\\/");
+
+        return actualPath.matches(regex) || actualPath.contains(endpointPattern.replace("{id}", ""));
+    }
+
+    @Data
+    @Builder
+    private static class RestAssuredCall {
+        private String httpMethod;
+        private String path;
+        private List<String> assertions;
+        private List<String> jsonPathExpressions;
     }
 }

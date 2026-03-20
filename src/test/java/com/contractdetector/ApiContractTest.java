@@ -11,8 +11,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.*;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @ActiveProfiles("test")
@@ -43,7 +42,7 @@ public class ApiContractTest {
             .get("/users")
             .then()
             .statusCode(200)
-            .body("$", not(empty()));
+            .body("username",everyItem(notNullValue()));
 
         SchemaCaptureFilter.clearTestContext();
     }

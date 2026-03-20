@@ -35,6 +35,8 @@ public class SchemaChange {
      */
     private final String path;
 
+    private String fieldName;
+
     /** The nature of this change. */
     private final ChangeType changeType;
 
