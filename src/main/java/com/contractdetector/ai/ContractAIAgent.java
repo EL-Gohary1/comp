@@ -2,6 +2,7 @@ package com.contractdetector.ai;
 
 import com.contractdetector.impact.AnalysisContext;
 import com.contractdetector.impact.ImpactAnalysisReadyEvent;
+import com.contractdetector.report.AIAgentReportService;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,9 +21,8 @@ public class ContractAIAgent {
     private final ChatLanguageModel ollamaModel;
     private final PromptBuilder promptBuilder;
     private final ResponseParser responseParser;
+    private final AIAgentReportService reportService;
 
-
-   // @Async("aiAgentExecutor")
     @EventListener
     public void onAnalysisReady(ImpactAnalysisReadyEvent event) {
         AnalysisContext context = event.getContext();
@@ -31,7 +31,13 @@ public class ContractAIAgent {
                 context.getDiff().getHttpMethod(),
                 context.getDiff().getEndpointPath());
 
-        process(context);
+        AIAgentResult result = process(context);
+        if (result != null) {
+            String reportPath = reportService.generateAndSaveReport(result);
+            if (reportPath != null) {
+                log.info("📊 Report generated: {}", reportPath);
+            }
+        }
     }
 
     public AIAgentResult process(AnalysisContext context) {

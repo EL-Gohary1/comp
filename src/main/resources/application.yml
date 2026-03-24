@@ -1,8 +1,8 @@
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/contract_detector
-    username: myuser
-    password: mypassword
+    username: postgres
+    password: password
     driver-class-name: org.postgresql.Driver
     
   jpa:

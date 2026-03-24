@@ -45,10 +45,18 @@ public class ImpactAnalysisService {
                 getTestSourceDir()
         );
 
+        System.out.println("********************");
+        System.out.println(affectedTests.toString());
+        System.out.println("********************");
+
         List<POJOClass> affectedPojos = pojoDiscoveryService.findAffectedPojos(
                 diff.getChanges(),
                 getMainSourceDir()
         );
+
+        System.out.println("********************");
+        System.out.println(affectedPojos.toString());
+        System.out.println("********************");
 
 
         AnalysisContext context = AnalysisContext.builder()
@@ -70,7 +78,7 @@ public class ImpactAnalysisService {
         context.getAffectedTests().forEach(t -> log.warn("   - {} in {}", t.getMethodName(), t.getClassName()));
 
         log.warn(">> Affected POJOs: {}", context.getAffectedPojos().size());
-
+        context.getAffectedPojos().forEach(t -> log.warn("   - {} in {}", t.getPackageName(), t.getClassName()));
 
         log.info(">> Total Risk: {} HIGH, {} MEDIUM, {} LOW",
                 context.getDiff().getHighRiskChanges().size(),

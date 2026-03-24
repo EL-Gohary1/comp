@@ -1,4 +1,4 @@
-package com.contractdetector;
+package com.contractdetector.tests;
 
 import com.contractdetector.capture.SchemaCaptureFilter;
 import com.contractdetector.capture.SchemaCaptureService;
@@ -42,7 +42,7 @@ public class ApiContractTest {
             .get("/users")
             .then()
             .statusCode(200)
-            .body("username",everyItem(notNullValue()));
+            .body("name",everyItem(notNullValue()));
 
         SchemaCaptureFilter.clearTestContext();
     }
