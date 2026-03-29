@@ -28,7 +28,7 @@ public class PromptBuilder {
         // ====== Schema Changes ======
         prompt.append("## SCHEMA CHANGES DETECTED\n\n");
         prompt.append("Endpoint: ").append(diff.getHttpMethod())
-              .append(" ").append(diff.getEndpointPath()).append("\n\n");
+                .append(" ").append(diff.getEndpointPath()).append("\n\n");
 
         prompt.append("Changes:\n");
         for (SchemaChange change : diff.getChanges()) {
@@ -71,7 +71,7 @@ public class PromptBuilder {
         // ====== Instructions ======
         prompt.append("## IMPORTANT INSTRUCTIONS\n\n");
         prompt.append("STRICTLY ONLY RETURN JSON. NO CONVERSATIONAL TEXT, NO EXPLANATION, NO MARKDOWN TAGS. START THE RESPONSE WITH '{' AND END WITH '}'.\n");
-        prompt.append("1. ONLY use the provided 'AFFECTED TEST CASES' and 'AFFECTED POJO CLASSES' listed above. Do NOT invent files.\n"); // منع التأليف
+        prompt.append("1. ONLY use the provided 'AFFECTED TEST CASES' and 'AFFECTED POJO CLASSES' listed above. Do NOT invent files.\n");
         prompt.append("2. Classify risk level (HIGH/MEDIUM/LOW/INFO) for each change.\n");
         prompt.append("3. Provide the exact Java code changes needed for POJOs and Tests.\n");
         prompt.append("4. CRITICAL: If no real POJOs or Tests are provided in the sections above, return an empty list for 'suggestedFixes'.\n\n");
@@ -150,8 +150,8 @@ public class PromptBuilder {
 
     private String formatPojo(POJOClass pojo) {
         String fields = pojo.getFields().stream()
-                            .map(f -> f.getName() + (f.getJsonPropertyName() != null ? " (JSON: " + f.getJsonPropertyName() + ")" : ""))
-                            .collect(Collectors.joining(", "));
+                .map(f -> f.getName() + (f.getJsonPropertyName() != null ? " (JSON: " + f.getJsonPropertyName() + ")" : ""))
+                .collect(Collectors.joining(", "));
 
         return String.format("- Class: %s\n" +
                         "  Package: %s\n" +

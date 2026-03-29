@@ -25,19 +25,6 @@ public class AsyncConfig {
         return executor;
     }
 
-    @Bean(name = "aiAgentExecutor")
-    public Executor aiAgentExecutor() {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(2);
-        executor.setMaxPoolSize(4);
-        executor.setQueueCapacity(20);
-        executor.setThreadNamePrefix("ai-agent-");
-        executor.setWaitForTasksToCompleteOnShutdown(true);
-        executor.setAwaitTerminationSeconds(240000);
-        executor.initialize();
-        return executor;
-    }
-
     @Bean
     public JavaParser javaParser() {
         return new JavaParser();

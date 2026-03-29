@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- Root Maven project configuration -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
              https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <!-- Maven model version -->
     <modelVersion>4.0.0</modelVersion>
 
+    <!-- Spring Boot parent (manages dependency versions automatically) -->
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
@@ -12,61 +16,72 @@
         <relativePath/>
     </parent>
 
+    <!-- Project coordinates -->
     <groupId>com.contractdetector</groupId>
     <artifactId>contract-detector</artifactId>
     <version>1.0.0-SNAPSHOT</version>
+
+    <!-- Project metadata -->
     <name>ContractDetector</name>
-    <description>Agentic API Change Detector — captures live API responses, infers JSON schemas, detects drift, and
-        performs impact analysis
+    <description>
+        Agentic API Change Detector — captures live API responses,
+        infers JSON schemas, detects drift, and performs impact analysis
     </description>
+
+    <!-- Packaging type -->
     <packaging>jar</packaging>
 
+    <!-- Global properties (versions and Java config) -->
     <properties>
-        <java.version>17</java.version>
-        <rest-assured.version>5.4.0</rest-assured.version>
-        <victools.version>4.31.1</victools.version>
-        <langchain4j.version>0.35.0</langchain4j.version>
+        <java.version>17</java.version> <!-- Java version -->
+        <rest-assured.version>5.4.0</rest-assured.version> <!-- API testing -->
+        <victools.version>4.31.1</victools.version> <!-- JSON schema generator -->
+        <langchain4j.version>0.35.0</langchain4j.version> <!-- AI integration -->
     </properties>
 
     <dependencies>
 
+        <!-- ===== JavaParser ===== -->
+        <!-- Used to analyze Java code (AST parsing, symbol resolution) -->
         <dependency>
             <groupId>com.github.javaparser</groupId>
             <artifactId>javaparser-symbol-solver-core</artifactId>
             <version>3.26.2</version>
         </dependency>
 
+        <!-- ===== Apache Commons Validator ===== -->
+        <!-- Provides utilities for validating emails, URLs, etc. -->
         <dependency>
             <groupId>commons-validator</groupId>
             <artifactId>commons-validator</artifactId>
             <version>1.7</version>
         </dependency>
 
-        <!-- ===== Spring Boot Core ===== -->
+        <!-- ===== Spring Boot Web ===== -->
+        <!-- REST APIs, controllers, embedded Tomcat -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+
+        <!-- ===== Spring Data JPA ===== -->
+        <!-- ORM + database interaction -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
 
         <!-- ===== PostgreSQL Driver ===== -->
+        <!-- Enables connection to PostgreSQL database -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
 
-        <!-- ===== Redis (optional placeholder) ===== -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-redis</artifactId>
-            <optional>true</optional>
-        </dependency>
 
         <!-- ===== Lombok ===== -->
+        <!-- Reduces boilerplate (getters/setters/builders) -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
@@ -74,12 +89,14 @@
         </dependency>
 
         <!-- ===== Jackson ===== -->
+        <!-- JSON serialization/deserialization -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
 
-        <!-- Source: https://mvnrepository.com/artifact/com.github.saasquatch/json-schema-inferrer -->
+        <!-- ===== JSON Schema Inferrer ===== -->
+        <!-- Infers JSON schema from real API responses (VERY IMPORTANT for your project) -->
         <dependency>
             <groupId>com.github.saasquatch</groupId>
             <artifactId>json-schema-inferrer</artifactId>
@@ -87,14 +104,8 @@
             <scope>compile</scope>
         </dependency>
 
-        <!-- ===== victools JSON Schema Generator ===== -->
-        <dependency>
-            <groupId>com.github.victools</groupId>
-            <artifactId>jsonschema-generator</artifactId>
-            <version>${victools.version}</version>
-        </dependency>
-
         <!-- ===== RestAssured ===== -->
+        <!-- Used for API testing and capturing responses -->
         <dependency>
             <groupId>io.rest-assured</groupId>
             <artifactId>rest-assured</artifactId>
@@ -102,51 +113,49 @@
         </dependency>
 
         <!-- ===== Spring Boot Test ===== -->
+        <!-- Testing framework (JUnit + Spring utilities) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
 
-        <!-- ===== H2 in-memory DB (test profile — no PostgreSQL required) ===== -->
-        <dependency>
-            <groupId>com.h2database</groupId>
-            <artifactId>h2</artifactId>
-            <scope>test</scope>
-        </dependency>
-
-        <!-- ===== Awaitility — async assertion helper for @Async tests ===== -->
-        <dependency>
-            <groupId>org.awaitility</groupId>
-            <artifactId>awaitility</artifactId>
-            <version>4.2.1</version>
-            <scope>test</scope>
-        </dependency>
-
+        <!-- ===== LangChain4j Spring Boot Starter ===== -->
+        <!-- Integrates LLMs into Spring Boot -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-spring-boot-starter</artifactId>
             <version>${langchain4j.version}</version>
         </dependency>
+
+        <!-- ===== LangChain4j Ollama ===== -->
+        <!-- Connects to local LLMs via Ollama -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-ollama</artifactId>
             <version>${langchain4j.version}</version>
         </dependency>
+
+        <!-- ===== LangChain4j Embeddings ===== -->
+        <!-- Used for vector embeddings (semantic search, similarity) -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-embeddings</artifactId>
             <version>${langchain4j.version}</version>
         </dependency>
 
-
     </dependencies>
 
     <build>
         <plugins>
+
+            <!-- ===== Spring Boot Maven Plugin ===== -->
+            <!-- Used to package and run the application -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+
+                <!-- Exclude Lombok from final build -->
                 <configuration>
                     <excludes>
                         <exclude>
@@ -155,10 +164,14 @@
                         </exclude>
                     </excludes>
                 </configuration>
+
             </plugin>
+
         </plugins>
     </build>
 
+    <!-- ===== Additional Repository ===== -->
+    <!-- Required for some GitHub-hosted dependencies (like json-schema-inferrer) -->
     <repositories>
         <repository>
             <id>jitpack.io</id>

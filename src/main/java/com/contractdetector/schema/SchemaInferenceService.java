@@ -21,6 +21,7 @@ public class SchemaInferenceService {
     private final ObjectMapper objectMapper;
     private final SchemaRegistryService schemaRegistryService;
 
+
     public void inferAndRegisterSchema(ApiResponseSample sample) {
         log.info("Inferring schema for: {} {}", sample.getMethod(), sample.getPath());
 

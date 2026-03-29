@@ -8,8 +8,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
-
+import java.util.concurrent.Executor;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.junit.jupiter.api.AfterEach;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
 
@@ -23,13 +27,18 @@ public class ApiContractTest {
     @Autowired
     private SchemaSampleRepository schemaSampleRepository;
 
+    @Autowired
+    @Qualifier("captureExecutor")
+    private Executor captureExecutor;
+
+
     @BeforeEach
     public void setup() {
         RestAssured.baseURI = "http://localhost";
         RestAssured.port = 3000;
-        
+
         RestAssured.replaceFiltersWith(new SchemaCaptureFilter(schemaCaptureService));
-        
+
         schemaSampleRepository.deleteAll();
     }
 
@@ -59,5 +68,22 @@ public class ApiContractTest {
             .body("$", not(empty()));
 
         SchemaCaptureFilter.clearTestContext();
+    }
+
+    @AfterEach
+    public void waitForAsyncTasks() throws InterruptedException {
+        waitForExecutor(captureExecutor);
+    }
+
+    private void waitForExecutor(Executor executor) throws InterruptedException {
+        if (executor instanceof ThreadPoolTaskExecutor) {
+            ThreadPoolTaskExecutor taskExecutor = (ThreadPoolTaskExecutor) executor;
+
+            // Wait until queue is empty and active count goes to 0
+            while (taskExecutor.getThreadPoolExecutor().getActiveCount() > 0
+                || !taskExecutor.getThreadPoolExecutor().getQueue().isEmpty()) {
+                Thread.sleep(100);
+            }
+        }
     }
 }

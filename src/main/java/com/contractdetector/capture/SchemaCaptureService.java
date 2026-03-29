@@ -17,6 +17,7 @@ public class SchemaCaptureService {
     private final SchemaSampleRepository schemaSampleRepository;
     private final SchemaInferenceService schemaInferenceService;
 
+    //capture the response async
     @Async("captureExecutor")
     public void captureAsync(ApiResponseSample sample) {
         log.debug("Async capture started for {} {}", sample.getMethod(), sample.getPath());
@@ -31,7 +32,9 @@ public class SchemaCaptureService {
         }
         
         log.info("Capturing API response for test: {}.{}", sample.getTestClassName(), sample.getTestMethodName());
+        //save to database
         schemaSampleRepository.save(sample);
+        //generate the schema from captured response
         schemaInferenceService.inferAndRegisterSchema(sample);
     }
 

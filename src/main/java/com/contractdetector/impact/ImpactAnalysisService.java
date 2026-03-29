@@ -25,7 +25,7 @@ public class ImpactAnalysisService {
 
     private final ApplicationEventPublisher eventPublisher;
 
-    @Async("captureExecutor")
+
     @EventListener
     public void onSchemaChanged(SchemaChangedEvent event) {
         SchemaDiff diff = event.getDiff();
